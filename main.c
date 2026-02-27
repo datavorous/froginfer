@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 typedef struct {
     int dim;
@@ -179,6 +180,64 @@ static void loadTokenizer(Tokenizer *tokenizer, const char *path, int vocab_size
     fclose(file);
 }
 
+
+static int vocabLookup(Tokenizer *tokenizer, const char *token) {
+    for(int i = 0; i < tokenizer->vocab_size; i++) {
+        if(strcmp(tokenizer->vocab[i], token) == 0)
+            return i;
+    }
+    return -1;
+}
+
+static int encode(Tokenizer *tokenizer, const char *text, int *tokens) {
+    int n = 0;
+    char buffer[512];
+
+    tokens[n] = 1;
+    n++;
+
+    for(const char *c = text; *c; c++) {
+        buffer[0] = *c;
+        buffer[1] = '\0';
+
+        int id = vocabLookup(tokenizer, buffer);
+        tokens[n] = (id != -1)? id : *c + 3;
+        n++;
+    }
+    while (1) {
+        float best = -INFINITY;
+        int best_id = -1;
+        int best_pos = -1;
+
+        for(int i = 0; i < n-1; i++) {
+            snprintf(buffer, sizeof(buffer), "%s%s", tokenizer->vocab[tokens[i]], tokenizer->vocab[tokens[i+1]]);
+
+            int id = vocabLookup(tokenizer, buffer);
+            if(id != -1 && tokenizer->scores[id] > best) {
+                best = tokenizer->scores[id];
+                best_id = id;
+                best_pos = i;
+            }
+        }
+        if (best_id == -1) break;
+
+        tokens[best_pos] = best_id;
+        for(int i = best_pos + 1; i < n-1; i++)
+            tokens[i] = tokens[i+1];
+        n--;
+    }
+    return n;
+}
+
+static const char *decode(Tokenizer *tokenizer, int previous, int current) {
+    const char *s = tokenizer->vocab[current];
+    if(previous >= 1 && s[0] < " ")s++;
+
+    unsigned char byte_value; 
+    if (sscanf(s, "<0x%02hhX>", &byte_value) == 1)
+            s = (char *)tokenizer->byte_pieces + byte_value * 2;
+    return s;
+}
 
 int main() {
     return 0;
