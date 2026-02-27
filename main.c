@@ -213,9 +213,19 @@ static int encode(Tokenizer *t, const char *text, int *tokens) {
     return n;
 }
 
-static const char *decode(Tokenizer *t, int token) {
-    return t->vocab[token];
+static const char *decode(Tokenizer *t, int prev, int cur) {
+    const char *s = t->vocab[cur];
+    if (prev == 1 && s[0] == ' ') s++;
+    unsigned char byte_val;
+    if (sscanf(s, "<0x%02hhX>", &byte_val) == 1) {
+        static char byte_piece[2];
+        byte_piece[0] = (char)byte_val;
+        byte_piece[1] = '\0';
+        s = byte_piece;
+    }
+    return s;
 }
+
 
 static float *forward(Transformer *transformer, int token, int pos) {
     Config *config = &transformer->config;
@@ -312,12 +322,13 @@ int main(int argc, char *argv[]) {
 
     int tokens[512];
     int n = encode(&tokenizer, argv[3], tokens);
-    int steps = (argc >= 5) ? atoi(argv[4]) : 100;
+    int steps = (argc >= 5) ? atoi(argv[4]) : 800;
     if (steps > transformer.config.seq_len) steps = transformer.config.seq_len;
     if (n > transformer.config.seq_len) n = transformer.config.seq_len;
     if (steps < n) steps = n;
 
     int token = tokens[0];
+    int prev = 1;
     for (int pos = 0; pos < steps; pos++) {
         float *logits = forward(&transformer, token, pos);
 
@@ -326,11 +337,13 @@ int main(int argc, char *argv[]) {
             if (logits[i] > logits[next]) next = i;
 
         if (pos < n - 1) {
+            prev = token;
             token = tokens[pos + 1];
         } else {
             if (next == 1) break;
-            printf("%s", decode(&tokenizer, next));
+            printf("%s", decode(&tokenizer, prev, next));
             fflush(stdout);
+            prev = next;
             token = next;
         }
     }

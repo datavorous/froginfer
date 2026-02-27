@@ -16,5 +16,5 @@ aggressively to the absolute barebones, such that even a middle schooler can und
 git clone, run `make` at root, and then:
 
 ```bash
-./llm model.bin "it was raining "
+./llm model.bin tokenizer.bin "it was raining "
 ```
