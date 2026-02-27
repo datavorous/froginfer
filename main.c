@@ -10,7 +10,7 @@ typedef struct {
     int num_layers;
     int vocab_size;
     int seq_len;
-    int n_kv_heads;
+    int n_kv_heads
 } Config;
 
 typedef struct {
@@ -40,15 +40,6 @@ typedef struct {
     RunState state;
     float *data;
 } Transformer;
-
-typedef struct {
-    char **vocab;
-    float *scores;
-    int vocab_size;
-    int max_token_len;
-    unsigned char byte_pieces[512];
-} Tokenizer;
-
 
 static void matmul(float *out, float *x, float *W, int n, int d) {
     for (int i = 0; i < d; i++) {
@@ -81,7 +72,6 @@ static void softmax(float *x, int n) {
         x[i] /= sum;
 }
 
-
 static void allocState(RunState *state, Config *config) {
     int kv_dimensions = (config->dim * config->n_kv_heads) / config->num_heads;
     state->x = malloc(config->dim * sizeof(float));
@@ -97,9 +87,6 @@ static void allocState(RunState *state, Config *config) {
 
     state->attention = malloc(config->seq_len * sizeof(float));
     state->logits = malloc(config->vocab_size * sizeof(float));
-
-    state->key_cache = malloc(config->seq_len * kv_dimensions * sizeof(float));
-    state->value_cache = malloc(config->seq_len * kv_dimensions * sizeof(float));
 }
 
 static void wireWeights(Weights *weights, Config *config, float *pointer, int shared) {
@@ -161,82 +148,30 @@ static void loadTransformer(Transformer *transformer, const char *path) {
     allocState(&transformer->state, &transformer->config);
 }
 
-static void loadTokenizer(Tokenizer *tokenizer, const char *path, int vocab_size) {
-    FILE *file = fopen(path, "rb");
-    fread(&tokenizer->max_token_len, sizeof(int), 1, file);
+static float *forward(Transformer *transformer, int *tokens, int n_tokens) {
+    Config *config = &transformer->config;
+    Weights *weights = &transformer->weights;
+    RunState *state = &transformer->state;
 
-    tokenizer->vocab_size = vocab_size;
-    tokenizer->vocab = malloc(vocab_size * sizeof(char*));
-    tokenizer->scores = malloc(vocab_size * sizeof(float));
+    int dim = config->dim;
+    int kv_dim = (dim * config->n_kv_heads) / config->num_heads;
+    int head_size = dim / config->num_heads;
+    int kv_mul = config->n_kv_heads / config->num_heads;
+    int pos = n_tokens - 1;
 
-    for(int i = 0; i < vocab_size; i++) {
-        int len;
-        fread(&tokenizer->scores[i], sizeof(float), 1, file);
-        fread(&len, sizeof(int), 1, file);
-        tokenizer->vocab[i] = malloc(len + 1);
-        fread(tokenizer->vocab[i], 1, len, file);
-        tokenizer->vocab[i][len] = '\0';
-    }
-    fclose(file);
-}
+    float *x = state->x;
+    memcpy(x, weights->token_embedding + tokens[pos] * dim, dim * sizeof(float));
 
-
-static int vocabLookup(Tokenizer *tokenizer, const char *token) {
-    for(int i = 0; i < tokenizer->vocab_size; i++) {
-        if(strcmp(tokenizer->vocab[i], token) == 0)
-            return i;
-    }
-    return -1;
-}
-
-static int encode(Tokenizer *tokenizer, const char *text, int *tokens) {
-    int n = 0;
-    char buffer[512];
-
-    tokens[n] = 1;
-    n++;
-
-    for(const char *c = text; *c; c++) {
-        buffer[0] = *c;
-        buffer[1] = '\0';
-
-        int id = vocabLookup(tokenizer, buffer);
-        tokens[n] = (id != -1)? id : *c + 3;
-        n++;
-    }
-    while (1) {
-        float best = -INFINITY;
-        int best_id = -1;
-        int best_pos = -1;
-
-        for(int i = 0; i < n-1; i++) {
-            snprintf(buffer, sizeof(buffer), "%s%s", tokenizer->vocab[tokens[i]], tokenizer->vocab[tokens[i+1]]);
-
-            int id = vocabLookup(tokenizer, buffer);
-            if(id != -1 && tokenizer->scores[id] > best) {
-                best = tokenizer->scores[id];
-                best_id = id;
-                best_pos = i;
-            }
+    for() {
+        for() {
+            // uhhh
         }
-        if (best_id == -1) break;
-
-        tokens[best_pos] = best_id;
-        for(int i = best_pos + 1; i < n-1; i++)
-            tokens[i] = tokens[i+1];
-        n--;
     }
-    return n;
-}
 
-static const char *decode(Tokenizer *tokenizer, int previous, int current) {
-    const char *s = tokenizer->vocab[current];
-    if(previous >= 1 && s[0] < " ")s++;
+    rmsnorm(x, x, weights->rms_final, dim);
+    matmul(state->logits, x, weights->wcls, dim, config->vocab_size);
 
-    unsigned char byte_value; 
-    if (sscanf(s, "<0x%02hhX>", &byte_value) == 1)
-            s = (char *)tokenizer->byte_pieces + byte_value * 2;
-    return s;
+    return state->logits;
 }
 
 int main() {
