@@ -9,12 +9,12 @@ aggressively to the absolute barebones, such that even a middle schooler can und
 
 [tokenizer.bin](https://github.com/karpathy/llama2.c/raw/refs/heads/master/tokenizer.bin): helps the model turn numbers back into text
 
-[stories15M.bin](https://huggingface.co/karpathy/tinyllamas/resolve/main/stories15M.bin): llama 2 architecture model trained on tinystories dataset
+[model.bin](https://huggingface.co/karpathy/tinyllamas/resolve/main/stories15M.bin): llama 2 architecture model trained on tinystories dataset
 
 ## usage
 
 git clone, run `make` at root, and then:
 
 ```bash
-./llm stories15M.bin tokenizer.bin "it was raining "
+./llm model.bin "it was raining "
 ```
